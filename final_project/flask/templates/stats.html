@@ -1,0 +1,268 @@
+{% extends 'temp.html' %}
+{% block title %}Stats{% endblock %}
+{% block div %}  
+    
+    <div class = "center-div", id="container">
+        <div id="master_content-full" >
+            <svg class="chart" width="920" height="500"> 
+
+            </svg>
+        </div>
+        <div id="pie_chart">
+            <svg class="pie_class" width="1500" height="700">
+
+            </svg>
+        </div>
+    </div>
+    <script>
+        var pass_in_data = JSON.parse({{stats_data|tojson|safe}});
+        var data = [];
+        var date = [];
+        var pie_data = JSON.parse({{purp_data|tojson|safe}});
+        for (var i = 0; i < pass_in_data.length; i++) {                               
+            data.push(pass_in_data[i].loan_amnt);
+            date.push(pass_in_data[i].issue_d);                                                                       
+        };    
+
+var Binwidth = 25, Height = 450;
+var margin = {top: 100, right: 0, bottom: 25, left: 100};
+var left = 30;
+//y axis
+var y = d3.scaleLinear()
+    .domain([0, d3.max(data)])
+    .range([Height-margin.top-margin.bottom,0]);
+//set the size of svg we're going to draw the bar chart on
+var chart = d3.select(".chart")
+    .attr("width", Binwidth * data.length+500)
+    .attr("height", Height)
+    .style("background-color","rgb(241, 241, 241)");
+//add all the g
+var bar = chart.selectAll("g")
+    .data(data)
+    .enter().append("g")
+    .attr("cx",200)
+    .attr("cy",500)
+    .attr("transform", function(d, i) { 
+        interval = 0
+        if(i%4 == 0){
+            interval = 2
+        }
+        return "translate(" + (margin.left+i * Binwidth + interval) + ","+ (y(d)+margin.top)+")"; })
+    .on("mouseover", handleMouseOver)
+    .on("mouseout",handleMouseOut);
+var color = "";
+function handleMouseOver(d, i) {  // Add interactivity
+    // Use D3 to select element, change color and size
+    color = d3.select(this).select("rect").style("fill")
+    d3.select(this).select("rect")
+        .style("fill", "white");
+    // Specify where to put label of text
+    svg=d3.select("svg")
+    d3.select(this).append("text")
+        .attr("id", "t" + i + "-" + d)
+        .attr("x",13)
+        .attr("y",2)
+        .attr("class","annotation")
+        .attr("dy", ".35em")
+        .text(function(d) {return String(d).replace(/(\d)(?=(\d{3})+$)/g, "$1,")});
+    
+    d3.select("svg").append("div")
+        .attr("position","absolute")
+        .attr("top","100px")
+        .attr("left","100px")
+        .attr("width",80)
+        .attr("height",80)
+        .text(function(d) {return d; });
+    //alert(d3.select("svg").attr("height"))
+}
+function handleMouseOut(d, i) {
+    // Use D3 to select element, change color back to normal
+    
+    d3.select(this).select("rect")
+        .style("fill", color);
+    // Select text by id and then remove
+    d3.select("#t" + i + "-" + d).remove();  // Remove text location
+}
+//add all the rectangles
+bar.append("rect")
+    .attr("width", Binwidth )
+    .attr("class","bar")
+    .attr("height", function(d) {return 0; })
+    .style("fill",function(d,i){
+        color1 = "#0891bd"
+        color2 = "#68c1de"
+        if(Math.floor(i/4)%2 == 0){
+            color = color1
+        }else{
+            color = color2
+        }
+        return color;
+    })
+    ;
+//add the bottom bar
+var x_value = [];
+d3.select(".chart").append("g")
+    .attr("id","year")
+    .attr("transform","translate(0,600)")
+var num = 0;
+var ll = ["2007"]
+for(var i = 0; i < date.length; i = i + 4){
+    ll.push(date[i].substring(0,4))
+}
+chart.selectAll("#year")
+    .data(ll).enter()
+    .append("rect")
+    .attr("class","bottom")
+    .attr("x",function(d,i ){
+      return i*100+1})
+    .attr("y",430)
+    .attr("width",100)
+    .attr("height",10)
+  chart.selectAll("#year")
+    .data(ll).enter()
+    .append("text")
+    .attr("x",function(d,i ){
+      return i*100+60
+      })
+    .attr("y",445)
+    .style("font", "10px times")
+    .attr("class","annotation")
+    .attr("dy", ".35em")
+    .text(function(d,i ){
+        return d
+      });
+//bar animation
+d3.select("svg").selectAll("rect.bar")
+    .transition()
+    .duration(800)
+    .attr("height", function(d) { return Height-margin.top-y(d)-margin.bottom; })
+  ;
+var x_value = [];
+var yAxis = d3.axisLeft().scale(y); 
+//create the rectangles at the bottom
+d3.select("svg").append("g").attr("class", "yAxis")
+         .attr("transform",`translate(${margin.left}, ${margin.top})`) .call(yAxis);
+//add the title to the bar chart
+d3.select(".chart").append("text")
+    .attr("x",290)
+    .attr("y",40)
+    .style("font", "25px times")
+    .attr("class","annotation")
+    .attr("dy", ".35em")
+    .text("TOTAL LOAN ISSUANCE");
+//pie chart
+var text = "";
+var width = 1000;
+var height = 260;
+var thickness = 40;
+var duration = 750;
+var radius = Math.min(width, height) / 2;
+var color = d3.scaleOrdinal(d3.schemeCategory10);
+var svg = d3.select(".pie_class")
+.append('svg')
+.attr('class', 'pie')
+.attr('width', width)
+.attr('height', height)
+.attr("x",200)
+.attr("y",100);
+var g = svg.append('g')
+.attr('transform', 'translate(' + (width/2) + ',' + (height/2) + ')');
+var arc = d3.arc()
+.innerRadius(radius - thickness)
+.outerRadius(radius);
+var pie = d3.pie()
+.value(function(d) { return d.loan_amnt; })
+.sort(null);
+// add the title of pie chart
+d3.select(".pie_class").append("text")
+        .attr("id", "t")
+        .attr("x",900)
+        .attr("y",40)
+        .style("font", "25px times")
+        .attr("class","annotation")
+        .attr("dy", ".35em")
+        .text("REPORTED LOAN PURPOSE");
+
+var color1 = ""
+var color2 = ""
+var path = g.selectAll('path')
+    .data(pie(pie_data))
+    .enter()
+    .append("g")
+    .on("mouseover", function(d) {
+        color1 = d3.select(this).style()
+      let g = d3.select(this)
+        .style("cursor", "pointer")
+        .style("fill", "black")
+        .append("g")
+        .attr("class", "text-group");
+ 
+      g.append("text")
+        .attr("class", "name-text")
+        .text(`${d.data.purpose}`)
+        .attr('text-anchor', 'middle')
+        .attr('dy', '-1.2em');
+  
+      g.append("text")
+        .attr("class", "value-text")
+        .text(String(`${d.data.loan_amnt}`).replace(/(\d)(?=(\d{3})+$)/g, "$1,"))
+
+        .attr('text-anchor', 'middle')
+        .attr('dy', '.6em');
+    })
+    .on("mouseout", function(d) {
+      d3.select(this)
+        .style("cursor", "none")  
+        .style("fill", color1)
+        .select(".text-group").remove();
+    })
+    .append('path')
+    .attr('d', arc)
+    .attr('fill', (d,i) => color(i))
+    .on("mouseover", function(d) {
+        color2 = d3.select(this).style()
+      d3.select(this)     
+        .style("cursor", "pointer")
+        .style("fill", "black");
+    })
+    .on("mouseout", function(d) {
+      d3.select(this)
+        .style("cursor", "none")  
+        .style("fill", color2);
+    })
+    .each(function(d, i) { this._current = i; });
+g.append('text')
+  .attr('text-anchor', 'middle')
+  .attr('dy', '.35em')
+  .text(text);
+        </script>
+<style>
+    #pie_char {
+        float: right;
+        height:500;
+        width:40%
+    }
+    #master_content-full
+    {
+        float: left;
+        
+    }
+    .chart rect {
+      fill: steelblue;
+    }
+    .chart text {
+      fill: black;
+      font: 10px sans-serif;
+      text-anchor: end;
+    }
+    .annotation {
+      fill: black;
+      font: 10px sans-serif;
+      text-anchor: end;
+    }
+    .center-div{
+        margin : 0 auto;
+        width: 1900px;
+    }
+</style>     
+{% endblock %}

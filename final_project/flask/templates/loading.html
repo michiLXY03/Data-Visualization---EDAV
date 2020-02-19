@@ -1,0 +1,42 @@
+
+<html>
+<title>Loading</title>
+<header>
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+        <link rel=stylesheet type=text/css href="{{ url_for('static', filename='styles_loading.css') }}">
+        <meta http-equiv="refresh" content="5;url=/stats" />
+</header>
+    <div class="loader">
+            <video id="video" playsinline="" muted="" autoplay="" loop="" data-silent="true" src="https://cdn.dribbble.com/users/1319489/screenshots/2946353/monkey-1.gif?vid=1">
+            </video>
+            <div id="video-controls" style="display: none;">
+            <span class="mute-controls mute-mute">
+            </span>
+            </div>
+            <noscript>
+                <img src="https://cdn.dribbble.com/users/1319489/screenshots/2946353/monkey-1.gif" alt="Monkey 1" />
+            </noscript>
+    </div>
+
+    <div class="wrap">
+            <div class="loading">
+              <div class="bounceball"></div>
+              <div class="text">NOW LOADING</div>
+            </div>
+    </div>
+
+    <script>
+        // window.addEventListener("load", function(){
+        //     const loader = document.querySelector(".loader");
+        //     loader.className += " hidden";
+        // })
+
+        $(function(){
+            setTimeout(function(){
+            $("div#loader").fadeOut(1000,function(){
+            window.location.href = "/;"
+        })
+        },6000)
+ });
+    </script>
+</html>
