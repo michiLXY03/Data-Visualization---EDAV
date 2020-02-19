@@ -1,4 +1,4 @@
-# EDAV
+# Data Visualization EDAV
 coursework and project of 5702 Exploratory Data Analysis and Visualization
 
 PSet 1 - PSet 4 using language R to visualize data. (work with teammates and going to be update)
