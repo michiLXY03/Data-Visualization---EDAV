@@ -1,0 +1,290 @@
+---
+author: "Rohit Dalal, Woo Jin Kim, Michi Liu"
+title: "EDAV Fall 2019 PSet 4"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+ # keep this chunk in your .Rmd file
+ knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+```{r}
+# Setup
+library(tidyverse)
+library(ggplot2)
+library(plotly)
+library(dplyr)
+
+library(extracat) #1
+library(GGally) #1
+
+library(tidyquant) #2
+
+library(choroplethr) #3
+library(choroplethrMaps) #3
+library(readr) #3
+```
+    
+### 1. Missing values
+
+You may choose your own data. The only requirement is that it has some missing values.  If the dataset is large, you may choose to work with only some of the columns and a random selection of rows.
+
+Use any R plotting package (`ggplot2`, `naniar`, `mi`, `extracat`, etc.) to answer the following questions. (Note that `extracat` is not currently on CRAN but you can install it from a CRAN read-only mirror on GitHub: https://github.com/cran/extracat)
+
+(a) Visualize and describe missing column patterns. Which variable has the highest number of missing values? 
+
+```{r}
+set.seed(17483)
+data <- mtcars
+for (i in 1:100){
+  data[sample(32,1),sample(11,1)] <- NA
+}
+visna(data, sort = 'b')
+```
+
+This is the graph that describes missing column pattern. It shows that qsec variable has the highest number of missing value followed by disp, am and hp.
+
+
+(b) Visualize and describe missing row patterns. Which row has the highest number of missing values? 
+
+```{r}
+df <- data %>%
+  rownames_to_column("id") %>%
+  gather(key, value, -id) %>%
+  mutate(missing = ifelse(is.na(value),"yes","no"))
+ggplot(df, aes(x = key, y=fct_rev(id), fill = missing))+
+  geom_tile(color = "white")+
+  ggtitle("Cars with NA added")+
+  scale_fill_viridis_d()+
+  theme_bw()
+```
+
+By looking at the graph, we can simply count the number of NA's for each row(which is car brand an model in this case). It shows that Lotus Europa has the highest NA values(7), followed by Hornet 4 Drive, Valiant, Merc 450sL and Lincoln Continental(5).
+
+
+(c) Do correlations exist between the values of other variables and missing patterns? Investigate two missing patterns and draw conclusions such as:
+
+"The number of missing values for the `last sale price` column seems to be correlated with `average income in zipcode`: there are more missing values in `last sale price` for homes in low-income neighborhoods." 
+
+"There does not seem to be any correlation between `apartment type` and missing values in `last sale price`"
+
+Support your conclusions with graphs. 
+
+```{r}
+ggpairs(data, columns = 3:11)
+```
+
+Variable Description:
+
+  mpg = Miles / US gallons
+  cyl = number of cylinders
+  disp = displacement
+  hp = gross horsepower
+  drat = real axel ratio
+  wt = weight
+  qseq = 1/4 mile time
+  vs = v/s (binary variable signaling the engine cylinder configuration a vshape vs=0 or straight line vs=1)
+  am = transmission type
+  gear = number of gears
+  carb = number of carburetors
+  
+We removed mpg and cyl variable from the data when We plot this. Since mpg and cyl has relatively few NAs(3 NAs for each variable). 
+
+**Each of our row represents the make and model of the cars. Since our variables are not that significantly different among each make and model and also the missing values for these variables are random, we should say there are no correlation.**
+
+
+
+### 2. Time Series
+
+(a) Use the **tidyquant** package to collect information on anything other than stock prices for which time series data is available. Create a multiple line chart to compare trends over time. Your chart should have at least 3 lines.
+
+```{r}
+df = tq_get(c("plat","gold","silv"), get="metal.prices")
+head(df)
+
+df %>% ggplot(aes(date, price, color=symbol)) +
+  geom_line()+
+  ggtitle("Price Fluctuation of Gold, Platinum and Silver")
+```
+
+(b) Transform the data so each series begins at 100 and replot. (see Unwin, p. 229)
+
+```{r}
+# Transform the data so each stock begins at 100 and replot.
+df %>%
+  group_by(symbol) %>%
+  mutate(price = 100*price/first(price)) %>%
+  ggplot(aes(date, price, color=symbol)) +
+  geom_line()+
+  ggtitle("Price Fluctuation of Metals Compare to the First Day")
+
+```
+
+
+(c) Compare the graphs in (a) and (b).
+
+**OBSERVATIONS:** 
+
+* In this case, we want to compare patterns in the time series of prices among Gold, Platinum and Silver. However, the unit prices of these three kinds of metal are significantly different. For example, the price of Gold is highest, which is never less than 1200 USD/OZT, whereas the price of Silver is always about 10-20 USD/OZT.
+
+* Therefore, if we simply put these 3 lines into a plot as (a), we can only see the approximate price differences among three metals, and fluctuations of high-price products(Gold, Platinum). Meanwhile, the low-price metal(Silver) seems to have no fluctuation in price. In this case, it's hard to analysed them together on a common scale.
+
+* In the figure of (b), we choose the first day as basline, and transform other days' value accordingly. This makes the prices of three matels comparable. Specifically, we can clearly see the fluctuation of Silver in graph (b). We can also find other fluctuation patterns according to this graph:
+
+(1) The price of Platinum first go down in June and July (which is less than the baseline), and then go up from July to October. After reach the peak in September, the price is relatively stable between approximate 105% - 110% of baseline.
+
+(2) The patterns of Gold and Silver are relatively similar, they both raise compared with the baseline. However, the change of price in Silver is more significant than Gold.
+
+(3) The prices of these three metals all reach the peak in September.
+
+
+
+### 3. Cause of Death
+
+Data: https://wonder.cdc.gov/ucd-icd10.html
+
+(a) Create a series of choropleth maps in which only one variable changes, such as level of a factor variable or time.
+
+For inspiration, see these examples:
+
+https://www.nytimes.com/interactive/2017/06/30/upshot/the-best-and-worst-new-york-neighborhoods.html
+
+https://www.nytimes.com/interactive/2017/10/05/upshot/gun-ownership-partisan-divide.html
+
+
+```{r}
+df = read_tsv(file = "Underlying Cause of Death, 1999-2017_leading_cause.txt")
+df <- filter(df, is.na(df$Notes))
+df$State <- tolower(df$State)
+df_select <- df[,c('State','Year','ICD-10 113 Cause List', 'Deaths')]
+names(df_select)[3] <- "Death_Cause"
+# df_select <- filter(df_select, Year %in% c(2011, 2012, 2013, 2014, 2015, 2016, 2017))
+df_select <- group_by(df_select, State, Death_Cause) %>% summarise(Deaths = sum(Deaths))
+df_deaths_accidents <- filter(df_select, Death_Cause == "#Accidents (unintentional injuries) (V01-X59,Y85-Y86)") %>% transmute(region = State, value = Deaths)
+df_deaths_respiratory <- filter(df_select, Death_Cause == "#Chronic lower respiratory diseases (J40-J47)") %>% transmute(region = State, value = Deaths)
+df_deaths_diabetes <- filter(df_select, Death_Cause == "#Diabetes mellitus (E10-E14)") %>% transmute(region = State, value = Deaths)
+df_deaths_heart<- filter(df_select, Death_Cause == "#Diseases of heart (I00-I09,I11,I13,I20-I51)") %>% transmute(region = State, value = Deaths)
+df_deaths_kidney <- filter(df_select, Death_Cause == "#Infections of kidney (N10-N12,N13.6,N15.1)") %>% transmute(region = State, value = Deaths)
+df_deaths_pneumonia <- filter(df_select, Death_Cause == "#Influenza and pneumonia (J09-J18)") %>% transmute(region = State, value = Deaths)
+df_deaths_cancer <- filter(df_select, Death_Cause == "#Malignant neoplasms (C00-C97)") %>% transmute(region = State, value = Deaths)
+df_deaths_alzheimer <- filter(df_select, Death_Cause == "#Alzheimer disease (G30)") %>% transmute(region = State, value = Deaths)
+df_deaths_Parkinson <- filter(df_select, Death_Cause == "#Parkinson disease (G20-G21)") %>% transmute(region = State, value = Deaths)
+```
+
+```{r}
+state_choropleth(df_deaths_accidents, title = "Accidents Death Rates", legend = "# of Deaths")
+state_choropleth(df_deaths_respiratory, title = "Chronic Lower Respiratory Death Rates", legend = "# of Deaths")
+state_choropleth(df_deaths_diabetes, title = "Diabetes Death Rates", legend = "# of Deaths")
+state_choropleth(df_deaths_heart, title = "Heart Diseases Death Rates", legend = "# of Deaths")
+state_choropleth(df_deaths_kidney, title = "Kidney Infection Death Rates", legend = "# of Deaths")
+state_choropleth(df_deaths_pneumonia, title = "Influenza & Pneumonia Death Rates", legend = "# of Deaths")
+state_choropleth(df_deaths_cancer, title = "Cancer Death Rates", legend = "# of Deaths")
+state_choropleth(df_deaths_alzheimer, title = "Alzheimer Death Rates", legend = "# of Deaths")
+state_choropleth(df_deaths_Parkinson, title = "Parkinson Death Rates", legend = "# of Deaths")
+```
+
+
+(b) Interpret the graphs you drew in (a).
+
+**OBSERVATIONS:**
+
+* Califirnoia, Texas, Florida, Illinios, Ohio, Pennsylvania and New York have highest number of deaths across all different causes of deaths.
+
+* Alaska, Montana, Wyoming, North Dakota, South Dakota and Vermont have lowest number of deaths across all different causes of deaths (low population being the factor).
+
+* Delware inspite of having low population have high number of deaths compared to states mentioned in point above.
+
+* Heart diseases are the leading cause of deaths followed by Cancer.
+
+* Deaths due to Kideny infections seems to be lowest followed by Parkinson (2nd lowest).
+
+* More people are dying due to Alzheimer compared to deaths due to Influenza and Pneumonia.
+
+* Deaths due to Chronic Lower Respiratory diseases are more compared to Diabetes.
+
+
+
+### 4. Mosaic plot (SVG / D3)
+
+(a) Manually create a 2 x 2 mosaic plot of party affiliation by gender for (House) representatives currently in the U.S. Congress using SVG. Data is available here in `.csv` form: https://github.com/unitedstates/congress-legislators
+
+You may remove any Independents. 
+
+The SVG should be 500 x 400 pixels and included in your `.Rmd` file between svg tags (**not** in a code chunk):
+
+The axes and levels of each variable should be labeled.
+
+
+```{r}
+df <- read.csv('legislators-current.csv', header=TRUE)
+df <- df[,c('party', 'gender', 'type')] %>% 
+      filter(party != "Independent") %>%
+      filter(type=="rep") %>%
+      group_by(party, gender) %>%
+      summarise(cnt = n())
+df
+```
+
+<svg width="500" height="400">
+			<rect x="150" y="100" width="54.6" height="193.2" fill="lightblue"></rect>  <!-- Dem F -->
+			<rect x="150" y="293.2" width="54.6" height="31.8" fill="darkblue"></rect>	<!-- Rep F -->
+			<rect x="207.6" y="100" width="167.4" height="100" fill="lightblue"></rect>	<!-- Dem M -->
+			<rect x="207.6" y="200" width="167.4" height="125" fill="darkblue"></rect>	<!-- Rep M -->
+			<text x="60" y="196">Democrat</text>
+			<text x="60" y="310">Republican</text>
+			<text x="40" y="230" transform="rotate(270 40,230)">PARTY</text>
+			<text x="177" y="90">F</text>
+			<text x="280" y="90">M</text>
+			<text x="240" y="60">GENDER</text>
+			<text x="10" y="20">MOSIAC PLOT - PARTY AFFILIATION BY GENDER (USING SVG)</text>
+</svg>
+
+
+(b) Change your code from (a) so that with the exception of the blank SVG, the mosaic plot is completely created with D3, based on a dataset that you provide that contains the 4 values you calculated for part (a). Your code should work if the values change.
+
+
+<svg id="partb" width="500" height="400">
+</svg>
+
+<script src="https://d3js.org/d3.v5.min.js"></script>
+
+<script>
+		   mysvg = d3.select("svg#partb");
+			 
+			 dem_f = 91;
+			 rep_f = 15;
+			 dem_m = 147;
+			 rep_m = 184;
+
+			 tot_f = dem_f + rep_f;
+			 tot_m = dem_m + rep_m;
+
+			 tot = tot_f + tot_m;
+
+			 mos_w = 225;
+			 mos_h = 225;
+
+			 f_width = (tot_f/tot)*mos_w;
+			 m_width = mos_w - (f_width + 3);
+
+			 dem_f_height = (dem_f/tot_f)*mos_h;
+			 rep_f_height = mos_h - dem_f_height;
+
+			 dem_m_height = (dem_m/tot_m)*mos_h;
+			 rep_m_height = mos_h - dem_m_height;
+
+		   mysvg.append("rect").attr("x", "150").attr("y", "100").attr("width", f_width).attr("height", dem_f_height).attr("fill", "lightblue");
+			 mysvg.append("rect").attr("x", "150").attr("y", 100+dem_f_height).attr("width", f_width).attr("height", rep_f_height).attr("fill", "darkblue");
+			 mysvg.append("rect").attr("x", 150+f_width+3).attr("y", "100").attr("width", m_width).attr("height", dem_m_height).attr("fill", "lightblue");
+			 mysvg.append("rect").attr("x", 150+f_width+3).attr("y", 100+dem_m_height).attr("width", m_width).attr("height", rep_m_height).attr("fill", "darkblue");
+			 mysvg.append("text").attr("x", "60").attr("y", "196").text("Democrat");
+			 mysvg.append("text").attr("x", "60").attr("y", "310").text("Republican");
+			 mysvg.append("text").attr("x", "40").attr("y", "230").attr("transform", "rotate(270 40,230)").text("PARTY");
+			 mysvg.append("text").attr("x", "177").attr("y", "90").text("F");
+			 mysvg.append("text").attr("x", "280").attr("y", "90").text("M");
+			 mysvg.append("text").attr("x", "240").attr("y", "60").text("GENDER");
+			 mysvg.append("text").attr("x", "10").attr("y", "20").text("MOSIAC PLOT - PARTY AFFILIATION BY GENDER (USING D3)");
+</script>
+		

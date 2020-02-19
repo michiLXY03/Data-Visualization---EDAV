@@ -1,0 +1,363 @@
+---
+title: "EDAV Fall 2019 PSet 3, Group3: Michi Liu(xl2904), Haibo Yu(hy2628)"
+output: html_document
+---
+
+Read *Graphical Data Analysis with R*, Ch. 6, 7
+
+Grading is based both on your graphs and verbal explanations. Follow all best practices as discussed in class.
+
+Data cleaning: for many of the questions, you will have to clean up the data more than in past assignments. Labels do not have to perfect but they have to be legible. Often it is helpful to shorten or abbreviate labels: this can be done before plotting or at times within the plot functions. You may make any changes to the data as appropriate before plotting, including renaming column names and the like. Be sure though to include all adjustments in your scripts.
+
+```{r setup, include=FALSE}
+ # keep this chunk in your .Rmd file
+ knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+```{r}
+library(data.table)
+library(parcoords)
+library(tidyverse)
+library(dplyr)
+library(GGally)
+library(rvest)
+library(robotstxt)
+library(d3r)
+```
+    
+### 1. Coal Emissions
+
+Data: https://datadiscovery.nlm.nih.gov/Environmental-Health/TOXMAP-EPA-Clean-Air-Markets-2016-Coal-Emissions/n97u-wtk7
+
+(OK to manually download `.csv` file)
+
+(a) Using `parcoords::parcoords()`, create an interactive parallel coordinate plot of `SO2`, `NOx`, `CO2`, `Heat Input` and `Gross Load`. Each line in the plot should represent one coal plant. Note any patterns.
+
+```{r fig.height=5, fig.width=10}
+df <- fread("https://datadiscovery.nlm.nih.gov/api/views/n97u-wtk7/rows.csv")
+#Get state from Location
+for (i in c(1:nrow(df))){
+  df[i,"Location"] <- substr(df[i,"Location"],1,2)
+}
+#deal with NAs
+df <- df %>%
+  filter(!is.na(SO2)) %>%
+  filter(!is.na(NOx)) %>%
+  filter(!is.na(CO2)) %>%
+  filter(!is.na(`Heat Input`)) %>%
+  filter(!is.na(`Gross Load`))
+
+
+df1 <- df[,c("SO2","NOx","CO2","Heat Input","Gross Load")]
+parcoords::parcoords(df1, brushMode = '1D-axes',rownames=F)
+```
+Patterns: <br />
+1. Many lines are overlapping in the lower value, suggests many data have relatively low value in there variables. <br />
+2. The emissions with extremely high value in SO2 are low in NOx, and the emissions with extremely high value in NOx are low in SO2 and CO2. <br />
+3. The lines between "CO2 - Heat Input - Gross Load" are relatively parallel, suggests there are strong connections among these three variables. Or we can say the coal emissions with high CO2 always accompany with high heat inpu and gross load. <br />
+
+
+(b) Create a second interactive parallel coordiante plot, with the lines colored by state. Include only the states with more than 15 plants. Do any new patterns emerge? Explain briefly.
+
+```{r fig.height=5, fig.width=10}
+df2 <- df[,c("Name","SO2","NOx","CO2","Heat Input","Gross Load","Location")]
+
+# find the state which has more than 15 plants
+groupCount <- df2 %>% group_by(Location) %>% 
+  summarize(Count=n()) %>%
+  ungroup()
+Count <- data.frame()
+for (i in c(1:nrow(groupCount))){
+  index = which(df2$Location == groupCount$Location[i])
+  Count[index,1] <- groupCount$Count[i]
+}
+names(Count) <- c("Count")
+df2 <- cbind(df2, Count)
+df2 <- df2%>% filter(Count>=15)
+
+df2 <- within(df2,
+              state <- factor(Location))
+parcoords::parcoords(df2[,c(2:6,9)],
+                     color = list(
+                       colorScale = "scaleOrdinal",
+                       colorBy = "state",
+                       colorScheme = "schemeCategory10"
+                     ),
+                     withD3 = TRUE,
+                     brushMode = '1D',
+                     rownames = F)
+```
+Patterns:<br />
+1. The plants in State "IN" have higher NOx, whose CO2, Heat Input and Gross Load are also relatlvely high, suggests the coal emissions in State "IN" are more serious.<br />
+2. SO2 emissions in State "TX" are higher, meanwhile the emissions of CO2, heat input and gross load are also relatively high. This suggests that the coal emissions in State "TX" are also serious and with higher SO2 pollution.<br />
+3. Environment in State "MI" and "IL" are relatively great, especially in State "IL". Since most of their emissions lines are in low value (expect 1 have relatively higher CO2 emission) and did not have higher value in emissions of specific contaminations.<br />
+
+
+(c) What do `SO2`, `NOx` and `CO2` stand for? Briefly describe why each is harmful.  
+
+1. "SO2" means sulfur dioxide, is one of the important air contaminations. Firstly, it could be dissolved by water to form sulfuric acid, which can cause acid rain and destroy environment to grow plants. Secondly, sulfur dioxide itself is harmful to human, animals and some plants.  
+<br />
+2. "NOx" means nitrogen oxides. They are not only one of the important greenhouse gases, but also can generate different kinds of harmful chemicals. Firstly, they can generate ozone by chemical process and significantly increase global warmming. Secondly, they can react with many other compounds to form harmful materials like nitric acid, which might even cause death.  
+<br />
+3. "CO2" means carbon dioxide, which is one of the most important greenhouse gases. Even if it can be absorbed by plants, excessive emission of CO2 still significantly increase global warmming.
+
+
+### 2. Planets
+
+Using **rvest**, scrape the data from this table: https://nssdc.gsfc.nasa.gov/planetary/factsheet/ (hint: `html_table` is helpful). Remove `MOON` data. Then, using `GGally::ggparcoord()`, create two parallel coordinate plots of the numerical variables in the dataset, one colored by the value of `Ring System?` and one colored by planet name. In both cases, each line should represent one planet. Use `coord_flip` so the variable names are easier to read.  Describe any patterns you find.
+
+```{r fig.height=12, fig.width=9}
+crawl_data <- function(data_url){
+  if (paths_allowed(data_url)){
+    data_html <- read_html(data_url) %>%
+      html_nodes("table") %>%
+      html_table(header = FALSE)
+  }
+} 
+
+myurl = "https://nssdc.gsfc.nasa.gov/planetary/factsheet/"
+# get data from the url
+df_2 <- data.frame(crawl_data(myurl[[1]]))
+
+# process row and col name
+# also drop the useless rows 22 and cols "MOON"
+# record the planet names and if they have ring systems. 
+# (since we need to covert data to numeric in next steps)
+df_2[1,1] <- "Planet"
+df_2 <- df_2[-22,-5]
+rowname <- c(df_2[,1])
+planetname <- data.frame(t(df_2[1,-1]))
+ifringsys <- data.frame(t(df_2[20,-1]))
+df_2 <- df_2[-1,-1]
+
+# drop "Global Magnetic Field?" since it is not numeric
+# drop "Surface Pressure (bars)" for too much unknown
+# temporarily remove useful string data like "Ring System"
+rowname <- rowname[-c(18,21)]
+df_3 <- t(df_2[-c(17,19,20),])
+
+# use regular expression to convert char to numeric
+for (i in c(1:nrow(df_3))){
+  for (j in c(2:ncol(df_3))){
+    df_3[i,j] <- gsub(pattern = "[*]*,*",replacement = "",df_3[i,j])
+  }
+}
+
+df_4 = as.data.frame(as.numeric(df_3[,1]))
+for (i in c(2:ncol(df_3))){
+  df_4 <- as.data.frame(cbind(df_4,as.numeric(df_3[,i])))
+}
+
+# merge "Planet" and "Ring system" to the data again
+df_5 <- cbind(df_4,ifringsys)
+df_5 <- cbind(planetname,df_5)
+names(df_5)<-c(rowname)
+
+# factorize Ring System
+# To use it draw the plot labelled by Ring System
+df_5 <- within(df_5,
+               RingSystem <- factor(df_5$`Ring System?`))
+
+ggparcoord(data = df_5, columns = 2:18, groupColumn = "RingSystem", alphaLines=.8)+
+  coord_flip()
+
+```
+```{r fig.height=12, fig.width=9}
+# factorize Planet Name
+# To use it draw the plot labelled by Planet Name
+df_5 <- within(df_5,
+               PlanetName <- factor(df_5$`Planet`))
+
+ggparcoord(data = df_5, columns = 2:18, groupColumn = "PlanetName", alphaLines=.8)+
+  coord_flip()
+```
+
+We have dropped two variables:<br />
+1. "Global Magnetic Field?" since it is not numeric.<br />
+2. "Surface Pressure (bars)" for too much unknown value.<br />
+<br />
+Patterns:<br />
+From the figure labelled by Ring System we can see that: <br />
+1. The planets without ring system all have less moons. Most of them have similar and low value in orbital period, aphelion, perihelion and also close to sun, except PLUTO, which is far away from Sun and has highest value in Orbital inclination, period, aphelion and perihelion.<br />
+2. Planets without ring system has similar pattern in variables  "Escape Velocity - Gravity - Density - Diameter - Mass" and "Orbital Period - Aphelion - Perihelion - Distance from sun" (as 1. says). While they have random patterns in variables "mean temperature - obliquity to orbit - orbital eccentricity - orbital inclination - orbital velocity". <br />
+3. Planets with ring system have moons but also relative low value in mean temperature, obliquity to orbit, orbital eccentricity, orbital inclination and velocity.<br />
+<br />
+From the graph labelled by Planet Name:<br />
+4. Planets with ring system have less density and lager escape valocity and diameter, suggests they are larger but lighter planet. They are NEPTUNE, JUPITER, SATURN and URANUS, the last four planets in "EIGHT PLANETS".<br />
+5. Planets without ring system are smaller planets with higher density, and their escape velocity also be lower. They are EARTH, MARS, MERCURY, VENUS and PLUTO. Except PLUTO (which consider as the drawf instead of planet), other four planets are close to sun and relatively small. <br />
+6. Compare to other planets without ring system, PLUTO (considered as the drawf instead of planet) has outlier in rotation period, which is reasonable since it is the farthest from the sun.<br />
+
+
+
+### 3. Heart Disease
+
+Data: four data frames that begin with `heart_disease` in the **ucidata** package
+
+Packages: You may use **vcd** or **ggmosaic**.
+
+(a) Create three mosaic plots, each involving two categorical variables from `heart_disease_cl` and interpret the plots. (You may reuse variables, for example X ~ Y and X ~ Z).
+```{r}
+library(ucidata)
+library(ggmosaic)
+```
+```{r}
+df_cl = ucidata::heart_disease_cl
+head(df_cl)
+```
+```{r}
+ggplot(data = df_cl) +
+  geom_mosaic(aes(x = product(sex), fill=cp))
+ggplot(data = df_cl) +
+  geom_mosaic(aes(x = product(sex), fill=thal))
+ggplot(data = df_cl) +
+  geom_mosaic(aes(x = product(sex), fill=slope))
+```
+
+
+
+(b) Combine the four heart disease datasets and create a mosaic plot showing chest pain by sex and location. Describe any patterns.
+```{r}
+df_cl$location <- "Cleveland Clinic Foundation"
+df_ch <- ucidata::heart_disease_ch
+df_ch$location <- "University Hospital, Zurich, Switzerland"
+df_hu <- ucidata::heart_disease_hu
+df_hu$location <- "Hungarian Institute of Cardiology, Budapest"
+df_va <- ucidata::heart_disease_va
+df_va$location <- "V.A. Medical Center, Long Beach, CA"
+total <- rbind(df_ch, df_cl,df_hu,df_va)
+ggplot(data = total) +
+  geom_mosaic(aes(x = product(sex,location),fill=sex)) +
+  coord_flip()+
+  facet_grid(total$cp)
+```
+
+The graph is telling chest pain patient counts and ratio seperated by sex.
+Cleveland has the largest number of typical angina patients, while Switzerland has the smallest.
+Budapest has the largest number of atypical angina patients, while Sitzerland has the smallets.
+Cleveland has the most non-angina patients, while Switzerland has the least.
+Cleveland has the most asymptomatic patients while Switzerland has the least.
+
+
+Generally, most patients are male. We can see from the graph that most of the patients are male in all of the 4 hospitals, no matter what kind of chest pain type(cp) is and no matter where the location is. It is always female that has fewer heart disease. What's more surprising is that the female patients ratio of typical angina and non-anginal in CA is so small compared to Cleveland and Budapest, we can also say that this trend may be caused by an extremely high male patients ratio in CA. Another strange pattern is that a relatively higher ratio is shown in atypical angina of CA, but other types of chest pain in CA are much fewer than other other country or states.
+
+
+Further, we noticed that, these 4 datasets are collected in different scales: Switzerland dataset is a nation-scaled data set, while the other 3 are city-scaled datasets, however, the instances of Switzerland dataset are fewer than other 3. Especially when we look at chest pain type of atypical angina of Switzerland. Does that mean Swiss has fewer heart disease patients in essence? Or it's just caused by population size or hospital choosing? That remains a problem without further information.
+
+
+### 4. District 3 Elementary Schools
+
+Recently, there has been much debate about the lack of racial and economic diversity at Manhattan District 3 elementary schools, part of a larger and long-standing controversy about iniquities in the New York City public school system as a whole.
+
+The *New York Times* article, "Rezoning Plan to Remake 3 Upper West Side Schools Will Proceed, City Says,"  (https://www.nytimes.com/2016/11/10/nyregion/rezoning-plan-for-3-upper-west-side-schools-will-proceed-city-says.html) (2016-11-10) identifies the 11 elementary schools in Manhattan District 3.
+
+For this question, we will analyze parent survey results for these schools.
+
+Data: https://www.schools.nyc.gov/about-us/reports/school-quality/nyc-school-survey
+
+
+(a) Choose one of the likert style questions from the 2019 parent survey and use a diverging stacked bar chart to show results for the 11 schools identified in the article referenced above.
+
+
+```{r}
+library(readxl)
+library(ggplot2)
+library(dplyr)
+library(stringr)
+library(tidyr)
+library(tidyverse)
+
+df_sch <- read_xlsx("2019-public-data-file_parent.xlsx",sheet = ' Parent %') 
+df_sch <- df_sch[,c(2,4:7)]
+df_sch <- df_sch[-c(1,2),]
+names(df_sch) <- c('schoolNames','stronglyDisagree','disagree',	'agree', 'stronglyAgree')
+```
+```{r}
+focusSchools = c('P.S. 165 ROBERT E. SIMON','P.S. 145, THE BLOOMINGDALE SCHOOL','P.S. 163 ALFRED E. SMITH', 'P.S. 075 EMILY DICKINSON', 'P.S. 084 LILLIAN WEBER', 'P.S. 009 SARAH ANDERSON', 'THE ANDERSON SCHOOL', 'P.S. 087 WILLIAM SHERMAN', 'THE RIVERSIDE SCHOOL FOR MAKERS AND ARTISTS', 'P.S. 199 JESSIE ISADOR STRAUS', 'P.S. 452')
+focus <- df_sch[df_sch$schoolNames  %in% focusSchools,]
+core_info <- gather(focus, key = "answers", value = "value",
+stronglyDisagree,
+disagree,
+agree,
+stronglyAgree
+)
+```
+```{r}
+low <- core_info[core_info$answers %in% c('disagree','stronglyDisagree'),]
+low$answers = factor(low$answers, levels=c('stronglyDisagree','disagree'))
+
+high <- core_info[core_info$answers %in% c('agree','stronglyAgree'),]
+high$answers = factor(high$answers, levels=c('stronglyAgree','agree'))
+ggplot() + geom_bar(data=high, aes(x = schoolNames, y=as.numeric(value), fill=answers), position="stack", stat="identity") +
+  geom_bar(data=low, aes(x = schoolNames, y=-as.numeric(value), fill=answers), position="stack", stat="identity") +
+  coord_flip() +
+  labs(title="School staff regularly communicate with me about how I can help my child learn.", y="percentage",x="school names")+
+  theme(plot.title = element_text(size=12, hjust=0.6)) 
+
+```
+
+
+
+
+(b) Choose a question that was asked in 2014 and 2019 and compare results for the three schools discussed most in the article: P.S. 199, P.S. 191, and P.S. 452. You may use two separate diverging stacked bar charts or combine all the information in one.
+```{r}
+library(readxl)
+#2a,2f. At this school my child is safe.  
+data_14 <- read_xlsx("2014_20School_20Survey.xlsx",sheet = "GenEd - Parent %")
+data_19 <- read_xlsx("2019-public-data-file_parent.xlsx",sheet = ' Parent %') 
+data_14 <- data_14[,c(1,64:68)][-c(1,2),]
+data_19 <- data_19[,c(1,72:76)][-c(1,2),]
+names(data_14) <- c('schoolNames','stronglyAgree','agree','disagree','stronglyDisagree','dontKnow')
+names(data_19) <- c('schoolNames','stronglyDisagree','disagree','agree', 'stronglyAgree','dontKnow')
+```
+```{r}
+library(tidyverse)
+focusSchools = c('03M191','03M199','03M452')
+focus14 <- data_14[data_14$schoolNames  %in% focusSchools,]
+focus19 <- data_19[data_19$schoolNames  %in% focusSchools,]
+core_info14 <- gather(focus14, key = "answers", value = "value",
+stronglyDisagree,disagree,agree,stronglyAgree,dontKnow)
+core_info19 <- gather(focus19, key = "answers", value = "value",
+stronglyDisagree,disagree,agree,stronglyAgree,dontKnow)
+```
+```{r}
+low14 <- core_info14[core_info14$answers %in% c('disagree','stronglyDisagree','dontKnow'),]
+low14$answers = factor(low14$answers, levels=c('stronglyDisagree','disagree','dontKnow'))
+low19 <- core_info19[core_info19$answers %in% c('disagree','stronglyDisagree','dontKnow'),]
+low19$answers = factor(low19$answers, levels=c('stronglyDisagree','disagree','dontKnow'))
+
+high14 <- core_info14[core_info14$answers %in% c('agree','stronglyAgree'),]
+high14$answers = factor(high14$answers, levels=c('stronglyAgree','agree'))
+high19 <- core_info19[core_info19$answers %in% c('agree','stronglyAgree'),]
+high19$answers = factor(high19$answers, levels=c('stronglyAgree','agree'))
+
+ggplot() + geom_bar(data=high14, aes(x = schoolNames, y=as.numeric(value), fill=answers), position="stack", stat="identity") +
+  geom_bar(data=low14, aes(x = schoolNames, y=-as.numeric(value), fill=answers), position="stack", stat="identity") +
+  coord_flip() +
+  labs(title="My child is safe in this school -2014", y="percentage",x="school codes")+
+  theme(plot.title = element_text(size=12, hjust=0.6)) 
+
+ggplot() + geom_bar(data=high19, aes(x = schoolNames, y=as.numeric(value), fill=answers), position="stack", stat="identity") +
+  geom_bar(data=low19, aes(x = schoolNames, y=-as.numeric(value), fill=answers), position="stack", stat="identity") +
+  coord_flip() +
+  labs(title="My child is safe in this school -2019", y="percentage",x="school codes")+
+  theme(plot.title = element_text(size=12, hjust=0.6)) 
+
+```
+
+
+
+
+
+(c) Interpret your findings of (b) in light of the reputations of the schools as presented in the article. Are they surprising or what you would have expected?
+
+we can see from part (b) that after rezoning, more parents feel their child is not safe in P.S.452 and P.S.199, and more parents feel their child is safe in P.S.191. And some parents become 'dont know' party who has no confidence about this question. Parents of P.S.199 and P.S.452 that were confident about their child's safty become less so, while parents of P.S.191 become more confident about their child's safety.
+
+This plot is not surprising after reading the article, we got a sentence: "P.S. 191, which has low standardized test scores and was once labeled “persistently dangerous” by New York State." 
+
+The article also mentioned that 191 will be rezoned to new area that can give it a fresh start, while 199 and 452 will be redistributed to 191's current location, where was labled 'dangerous'.
+
+It seems common that parents think their child is not safe in an 'offically' dangerous area. The plot tells us that by moving to a new place, more parents of P.S.191 think the school is safe for their child, while more parents of P.S.199 and P.S.452 think it not safe because of moving to a dangerous zone. 
+
+
+
+

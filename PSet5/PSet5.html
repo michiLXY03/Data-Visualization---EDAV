@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Boxplots</title>
+    <script src="https://d3js.org/d3.v5.min.js"></script>
+  </head>
+
+	<body>
+
+		<div style="padding: 50px; float:left;">
+		</div>
+
+		<div id="chart" style="width: 400px; float:left;">
+			<h3>Create a boxplot</h3>
+			<p>Click in the center of the blue strip to add points.</p>
+
+			<div id="rates">
+			  <input type="radio" id="add" name="rate" value="add" > add
+			  <input type="radio" id="delete" name="rate" value="delete" > delete
+			</div>
+			<br>
+
+		</div>
+
+
+		<div id = "summary" style="width: 400px; float: left;">
+			<h3>How to Read a Boxplot</h3>
+			<p> For the boxplot, we are using d3.quantile method to find the summary statistics (Q1,median and Q3) and IQR is calculated as Q3-Q1. 
+<br> Find the x and y coordinates of the mouse click when clicked in the SVG region.
+<br> If the Add button is checked, append a circle for the boxplot in the SVG region with radius 5 and update the ‘data’ variable with the coordinates of the dots using data.push function. If delete button is checked then use data.splice function to remove the data points from the ‘data’ variable. 
+<br> The summary statistics are updated with new data points and used to create the box plot by computing the height, and y coordinates for the median, min and max line. Update the upper, and lower whiskers, median, Q1, Q3, outliers and data values and display them as text on the webpage
+<br> The outlier data points are displayed in Red while others are displayed in black colors
+</p> 
+		</div>
+		
+
+		
+		<script type="text/javascript">
+
+			var svgHeight = 500;
+			var svgWidth = 300;
+			var margin = {top:25, right:25, bottom:25, left:25}
+			var bg_Height = svgHeight - margin.top - margin.bottom
+			var bg_Width = svgWidth - margin.left - margin.right
+			
+			var spacing = 40;
+			var outer_width = 200
+			var inner_width = 150
+			
+			var Q1=0
+			var Q3=0
+			var median = 0
+			var IQR = Q3-Q1
+			var max = 0
+			var min = 0
+			var my_outlier=[]
+			
+			var my_rects = [
+
+				{
+					id: "rect_background",
+					x:margin.left,
+					y:margin.top,
+					width: bg_Width,
+					height: bg_Height,
+					color: "white"
+					
+				},
+
+				{
+					id: "rect_outer",
+					x:margin.left + bg_Width/2 - outer_width/2,
+					y:margin.top,
+					width: outer_width,
+					height: bg_Height,
+					color: "aliceblue"
+				},
+				
+				{
+					id: "rect_inner",
+					x:margin.left + bg_Width/2 - inner_width/2,
+					y:margin.top,
+					width: inner_width,
+					height: bg_Height,
+					color: "rgb(188, 234, 245)",
+				},
+				
+			]
+			
+			var radius = 4
+
+			d3.select("#chart")
+				.append("svg")
+				.attr("width", svgWidth)
+				.attr("height", svgHeight)
+			
+			var svg = d3.select("svg");
+
+			// Add scale and axis
+			var xScale = d3.scaleLinear()
+				.domain([-100, 100]).nice()
+				.range([margin.left + bg_Width/2 - inner_width/2, margin.left + bg_Width/2 + inner_width/2]);
+			
+			var yScale = d3.scaleLinear()
+				.domain([100,-100])
+				.range([margin.top,bg_Height+margin.top]);
+			
+			var yAxis = d3.axisLeft()
+				.scale(yScale);
+			
+
+			svg.selectAll("rect")
+				.data(my_rects)
+				.enter()
+				.append("rect")
+				.attr("id", d => d.id)
+				.attr("x", d => d.x)
+				.attr("y", d => d.y)
+				.attr("width", d => d.width)
+				.attr("height", d => d.height)
+				.attr("fill", d => d.color);
+				
+                         <!-- Initialize the central, max, min, median line for creating the boxplot -->
+
+			svg.append("line")
+				.attr("id", "mid_line")
+				.attr("clip-path", "url(#clip)")
+				.attr("x1", xScale(0))
+				.attr("x2", xScale(0))
+				.attr("y1", yScale(min))
+				.attr("y2", yScale(max))
+				.attr("stroke", "rgb(188, 234, 245)")
+
+			svg.append("line")
+				.attr("id", "max_line")
+				.attr("clip-path", "url(#clip)")
+				.attr("x1", xScale(-100))
+				.attr("x2", xScale(100))
+				.attr("y1", yScale(25))
+				.attr("y2", yScale(25))
+				.attr("stroke", "rgb(188, 234, 245)")
+
+			svg.append("line")
+				.attr("id", "min_line")
+				.attr("clip-path", "url(#clip)")
+				.attr("x1", xScale(-100))
+				.attr("x2", xScale(100))
+				.attr("y1", yScale(min))
+				.attr("y2", yScale(min))
+				.attr("stroke", "rgb(188, 234, 245)")
+				
+				<!-- Add the boxplot rect -->
+				
+			svg.append("rect")
+				.attr("id", "boxplot")
+				.attr("x", margin.left + bg_Width/2 - inner_width/2)
+				.attr("y", margin.top + bg_Height/2 - 50)
+				.attr("width", inner_width)
+				.attr("height", 0)
+				.attr("fill", "rgb(49, 165, 232)");
+				
+			svg.append("line")
+				.attr("id", "median_line")
+				.attr("clip-path", "url(#clip)")
+				.attr("x1", xScale(-100))
+				.attr("x2", xScale(100))
+				.attr("y1", yScale(median))
+				.attr("y2", yScale(median))
+				.attr("stroke", "rgb(188, 234, 245)")
+				
+						<!-- Initialize the statistic data text -->
+
+			d3.select("#summary")
+				.append("p")
+				.attr("id", "data_values")
+				.attr("x", 400)
+				.attr("y", margin.top + spacing)
+				.text("Data Values:");
+
+			d3.select("#summary")
+				.append("p")
+				.attr("id", "outliers")
+				.attr("x", 400)
+				.attr("y", margin.top + 2 * spacing)
+				.text("Outliers:");
+
+			d3.select("#summary")
+				.append("p")
+				.attr("id", "median")
+				.attr("x", 400)
+				.attr("y", margin.top + 5 * spacing)
+				.text("Median:");
+
+			d3.select("#summary")
+				.append("p")
+				.attr("id", "upper")
+				.attr("x", 400)
+				.attr("y", margin.top + 3 * spacing)
+				.text("Upper Whisker:");
+
+			d3.select("#summary")
+				.append("p")
+				.attr("id", "Q3")
+				.attr("x", 400)
+				.attr("y", margin.top + 4 * spacing)
+				.text("Q3:");
+
+			d3.select("#summary")
+				.append("p")
+				.attr("id", "Q1")
+				.attr("x", 400)
+				.attr("y", margin.top + 6 * spacing)
+				.text("Q1:");
+
+			d3.select("#summary")
+				.append("p")
+				.attr("id", "lower")
+				.attr("x", 400)
+				.attr("y", margin.top + 7 * spacing)
+				.text("Lower Whisker:");
+
+
+
+			svg.append("g")
+			.attr("class", "yAxis")
+			.attr("transform", `translate(${25}, ${0})`)
+			.call(yAxis)
+			
+			var rectangles = svg.selectAll("rect");
+			
+			function Array_Sort_Numbers(inputarray){
+			  return inputarray.sort(function(a, b) {
+				return a - b;
+			  });
+			}
+			
+			function quartile(data, q) {
+				data=Array_Sort_Numbers(data);
+				var pos = ((data.length) - 1) * q;
+				var base = Math.floor(pos);
+				var rest = pos - base;
+				if( (data[base+1]!==undefined) ) {
+				return data[base] + rest * (data[base+1] - data[base]);
+				} else {
+				return data[base];
+				}
+			}
+			
+			function data_stat(data) {
+				Q1 = quartile(data, 0.25);
+				Q3 = quartile(data, 0.75);
+				IQR = Q3 - Q1
+				median = quartile(data, 0.5);
+				min = Q1 - 1.5*IQR
+				max = Q3 + 1.5*IQR
+				max = Math.min(Q3 + 1.5*IQR, Math.max.apply(null, data))
+				min = Math.max(Q1 - 1.5*IQR, Math.min.apply(null, data))
+				return 
+			}
+			
+			function get_points_y(){
+				var points = svg.selectAll("circle");
+				var points_data = points.data()
+				var box_data = []
+				var j;
+				for (j = 0; j < points_data.length; j++){
+					box_data.push(points_data[j][1])
+				}
+				return box_data
+			}
+
+			function draw_box_plot(data){
+				data_stat(data)
+				
+				if(data.length >= 1){
+					svg.select("rect#boxplot")
+					.transition().duration(500)
+					.attr("y", Q1)
+					.attr("height", Q3-Q1)
+					.attr("stroke", "black")
+					
+					svg.select("line#mid_line")
+					.transition().duration(500)
+					.attr("y1", min)
+					.attr("y2", max)
+					.attr("stroke", "black")
+					
+					svg.select("line#max_line")
+					.transition().duration(500)
+					.attr("y1", max)
+					.attr("y2", max)
+					.attr("stroke", "black")
+					
+					svg.select("line#min_line")
+					.transition().duration(500)
+					.attr("y1", min)
+					.attr("y2", min)
+					.attr("stroke", "black")
+					
+					svg.select("line#median_line")
+					.transition().duration(500)
+					.attr("y1", median)
+					.attr("y2", median)
+					.attr("stroke", "black")
+					
+					my_outlier=[]
+					svg.selectAll("circle")
+						.style("fill", function(d) {
+						if (Math.round(d[1]) >= Math.round((Q1 - 1.5*IQR)) && Math.round(d[1]) <= Math.round((Q3 + 1.5*IQR))) {return "black";}
+						else { 
+							my_outlier.push(Math.round(yScale.invert(d[1])))
+							return "red";
+						}
+						});
+				}
+				else{
+					svg.selectAll("line")
+						.attr("stroke", "rgb(188, 234, 245)")
+					svg.select("#boxplot")
+						.attr("stroke", "rgb(188, 234, 245)")
+				}
+			}
+			
+			function change_stat_data(data){
+				
+				if (data.length>=1){
+					sort_data = Array_Sort_Numbers(data)
+
+					scale_data = []
+					for (var i = 0; i<data.length; i++){
+						scale_data.push(Math.round(yScale.invert(sort_data[i])))
+					}
+
+					d3.select("#data_values")
+						  .transition().duration(0)
+						  .text("Data Values: " + scale_data.toString());
+
+					d3.select("#outliers")
+						  .transition().duration(0)
+						  .text("Outliers: " + my_outlier.toString());
+
+					d3.select("#upper")
+						  .transition().duration(0)
+						  .text("Upper Whisker: " + Math.round(yScale.invert(min)).toString());
+
+					d3.select("#Q3")
+						  .transition().duration(0)
+						  .text("Q3: " + Math.round(yScale.invert(quartile(data,0.25))).toString());
+
+					d3.select("#median")
+						 .transition().duration(0)
+						  .text("Median: " + Math.round(yScale.invert(quartile(data,0.50))).toString());
+
+					d3.select("#Q1")
+						 .transition().duration(0)
+						 .text("Q1: " + Math.round(yScale.invert(quartile(data,0.75))).toString());
+					
+					d3.select("#lower")
+						 .transition().duration(0)
+						 .text("Lower Whisker: " + Math.round(yScale.invert(max)).toString());
+				}
+				else{
+					d3.select("#data_values")
+						  .transition().duration(0)
+						  .text("Data Values: ");
+
+					d3.select("#outliers")
+						  .transition().duration(0)
+						  .text("Outliers: ");
+
+					d3.select("#upper")
+						  .transition().duration(0)
+						  .text("Upper Whisker: ");
+
+					d3.select("#Q3")
+						  .transition().duration(0)
+						  .text("Q3: ");
+
+					d3.select("#median")
+						 .transition().duration(0)
+						  .text("Median: ");
+
+					d3.select("#Q1")
+						 .transition().duration(0)
+						 .text("Q1: ");
+					
+					d3.select("#lower")
+						 .transition().duration(0)
+						 .text("Lower Whisker: ");
+				}
+			}
+			
+			function points_act(){
+				var position = d3.mouse(this);
+				var box_data = []
+				
+				if ((position[1]<=margin.top || position[1] >=margin.top+bg_Height) ||
+					(position[0]<=margin.left + bg_Width/2 - inner_width/2 || 
+					 position[0]>=margin.left + bg_Width/2 + inner_width/2)){
+					console.log("out of range")
+					return ;
+				}
+				
+				points = svg.selectAll("circle");
+				points_data = points.data();
+				
+				if (document.getElementById('add').checked){
+				
+					points_data.push(position)
+					
+					var new_points = points.data(points_data)
+					new_points.enter()
+						.append('circle')
+						.attr('cx', d => d[0])
+						.attr('cy', d => d[1])
+						.attr('r', radius)
+						.style('fill', 'black')
+						.attr('stroke', 'white')
+
+					new_points.exit().remove();
+					
+					var box_data = get_points_y()
+					draw_box_plot(box_data);
+					change_stat_data(box_data);
+					
+					return ;
+				}
+				
+				if (document.getElementById('delete').checked){
+					var i;
+					for (i = 0; i < points_data.length; i++){
+						
+						if (Math.pow(position[0]-points_data[i][0],2)+
+							Math.pow(position[1]-points_data[i][1],2)<=
+							radius*radius){
+							points.filter((d, j) => i === j).remove()
+							break;
+						}
+					}
+					var box_data = get_points_y()
+					draw_box_plot(box_data);
+					change_stat_data(box_data);
+					
+					points = svg.selectAll("circle");
+					return ;
+				}
+			
+				return ;
+			
+			}
+			
+			//var svg_rect_1 = svg.select("#Innerbox");
+			var bottom_rect = svg.select("#BottomRect");
+			svg.on("click", points_act);
+
+			 		
+
+		</script>
+
+	</body>
+
+</html>

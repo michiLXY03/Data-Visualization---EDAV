@@ -1,0 +1,270 @@
+---
+title: "EDAV Fall 2019 Probem Set 1"
+author: "Michi Liu(xl2904) & Xinyuan He(xh2439)"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+Read *Graphical Data Analysis with R*, Ch. 3
+
+Grading is based both on your graphs and verbal explanations. Follow all best practices as discussed in class.
+
+The datasets in this assignment are from the **ucidata** package which can be installed from GitHub.  You will first need to install the `devtools` package if you don't have it:
+
+```{r}
+#install.packages("devtools")
+#devtools::install_github("coatless/ucidata")
+```
+then,  
+
+`devtools::install_github("coatless/ucidata")`
+
+```{r setup, include=FALSE}
+ # keep this chunk in your .Rmd file
+ knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+    
+
+### 1. Abalone 
+
+[18 points]
+
+Choose one of the numeric variables in the `abalone` dataset.  
+
+a) Plot a histogram of the variable. 
+```{r}
+library(ucidata)
+library(ggplot2)
+df = data.frame(abalone$length)
+#names(df)
+ggplot(df,aes(abalone.length))+geom_histogram(fill="blue",color="black")
+```
+
+b) Plot histograms, faceted by `sex`, for the same variable. 
+```{r}
+library(ucidata)
+library(ggplot2)
+#summary(abalone)
+df2 <- data.frame(abalone$length, abalone$sex)
+ggplot(df2, aes(abalone.length)) +
+  geom_histogram(fill="blue",color="black") +
+  facet_grid(cols = vars(df2[,"abalone.sex"]))
+```
+
+c) Plot multiple boxplots, grouped by `sex` for the same variable. The boxplots should be ordered by decreasing median from left to right.  
+```{r}
+library(ucidata)
+library(ggplot2)
+ggplot(abalone, aes(x = reorder(sex, -abalone$length, FUN = median), y = abalone$length)) + geom_boxplot()
+```
+
+d) Plot overlapping density curves of the same variable, one curve per factor level of `sex`, on a single set of axes. Each curve should be a different color. 
+```{r}
+ggplot(abalone, aes(x=abalone$length, color=abalone$sex)) +
+  geom_density()
+```
+
+
+e) Summarize the results of b), c) and d): what unique information, *specific to this variable*, is provided by each of the three graphical forms?
+
+1. In terms of length, female and male have similar pattern with close median and close average, in which female has a little higher value of length. While male has more lower outliers compared to female. 
+
+2. Infant has lowest value of length in general, compared to female and male, which can be shown in all three plots. 
+
+f) Look at photos of an abalone. Do the measurements in the dataset seem right? What's the issue?
+```{r}
+summary(abalone)
+```
+According to the description of the dataset, looks like the unit of the length variable is not correct since the maximum is only 0.815mm, which is less than 1mm. While the picture shows that a normal abalone is usually with a length over a few centimeter. 
+
+There are other variables have the same issue, including variable diameter, height etc. 
+
+### 2. Hepatitis 
+
+[6 points]
+
+a) Draw two histograms of the age variable in the `hepatitis` dataset in the **ucidata** package, with binwidths of 5 years and `boundary = 0`, one right open and one right closed.  How do they compare?
+
+**Right Closed**
+```{r}
+library(ucidata)
+library(ggplot2)
+#head(hepatitis)
+ggplot(hepatitis, aes(x=age)) + 
+  geom_histogram(binwidth=5, boundary = 0, closed = "right")
+```
+
+**Right Open**
+
+```{r}
+library(ucidata)
+library(ggplot2)
+#head(hepatitis)
+ggplot(hepatitis, aes(x=age)) + 
+  geom_histogram(binwidth=5, boundary = 0, closed = "left")
+```
+
+The two histogram looks unsimilar, mainly becasue some age value fall on the boundary between two bins so that right closed and right open will classify those values into different bins.  
+
+b) Redraw the histogram using the parameters that you consider most appropriate for the data. Explain why you chose the parameters that you chose.
+
+```{r}
+library(ucidata)
+library(ggplot2)
+#head(hepatitis)
+ggplot(hepatitis, aes(x=age)) + 
+  geom_histogram(binwidth=5, boundary = 0.5, right = T)
+ggplot(hepatitis, aes(x=age)) + 
+  geom_histogram(binwidth=5, boundary = 0.5, right = F)
+```
+
+We adjust the boundary from 0 to 0.5, so that no age value will fall on the boundary between two bins since all age values are integers. In this case, right open and right closed histogram looks exactly the same. 
+
+### 3. Glass
+
+[18 points]
+
+a) Use `tidyr::gather()` to convert the numeric columns in the  `glass` dataset in the **ucidata** package to two columns: `variable` and `value`. The first few rows should be:
+
+```
+  variable   value
+1       RI 1.52101
+2       RI 1.51761
+3       RI 1.51618
+4       RI 1.51766
+5       RI 1.51742
+6       RI 1.51596
+```
+
+Use this form to plot histograms of all of the variables in one plot by faceting on `variable`. What patterns do you observe?
+```{r}
+library(ucidata)
+library(ggplot2)
+#head(glass)
+glass1 = glass[,2:11]
+#head(glass1)
+glass_gather = tidyr::gather(glass1, key = "variable", value = "value")
+head(glass_gather)
+```
+
+**For the remaining parts we will consider different methods to test for normality.**
+
+b) Choose one of the variables with a unimodal shape histogram and draw a true normal curve on top on the histogram. How do the two compare?
+```{r}
+binwidth = 0.2
+n = 214
+ggplot(glass, aes(x=Si)) + 
+  geom_histogram(binwidth = binwidth)+
+  stat_function(fun = function(x) dnorm(x, mean = mean(glass$Si), sd = sd(glass$Si)) * n * binwidth,
+    color = "darkred", size = 1)
+```
+
+Compared to the true normal curve, the real distribution of Si variable has more data gather around the hump and less data are distributed far away from the center. Also, the real hump of the Si is a bit greater than the true normal curve. 
+
+c) Perform the Shapiro-Wilk test for normality of the variable using the `shapiro.test()` function. What do you conclude?
+
+```{r}
+shapiro.test(glass$Si)
+```
+
+From the output, the p-value < 0.05 implying that the distribution of the data are significantly different from normal distribution. 
+
+d) Draw a quantile-quantile (QQ) plot of the variable. Does it appear to be normally distributed?
+
+```{r}
+p <- ggplot(glass, aes(sample = Si))
+p + stat_qq() + stat_qq_line()
+```
+
+It does not appear to be normally distributed since the points at both tail are far from the quntaile-quantile line. 
+
+e) Use the **nullabor** package to create a lineup of histograms in which one panel is the real data and the others are fake data generated from a null hypothesis of normality. Can you pick out the real data? If so, how does the shape of its histogram differ from the others? 
+
+```{r}
+#install.packages("nullabor")
+library(nullabor)
+library(ucidata)
+library(ggplot2)
+d = lineup(method = null_dist("Si", "norm"),true = glass)
+ggplot(data=d, aes(x=Si)) + geom_histogram(binwidth = 0.2) + facet_wrap(~ .sample)
+```
+
+We can found out that the real data is in graph 16. Graph 16 has highest max count and has more outliers near the two tails, among all the graphs. All the other graphs are similar with the normal curve. 
+
+f) Show the lineup to someone else, not in our class (anyone, no background knowledge required). Ask them which plot looks the most different from the others. Did they choose the real data?
+
+Yes, they successfully choose the real data. 
+
+g) Briefly summarize your investigations. Did all of the methods produce the same result?
+
+From b) we can see that the histogram is not well fitted with the true normal curve.
+From c) we can see that Shapiro-Wilk test for normality shows that the p value is significantly low that the distribution is not similar with normal distribution. 
+From d) the QQ plot shows that the data points are far from the QQ line, indicating the data is not normally distributed. 
+From e), we can find out the true data histogram from a lineup of histograms so that the true data is not similar to the normal distribution. 
+
+All the methods produce the same result that the data is not significantly similar with the normal distribution. 
+
+### 4. Forest Fires
+
+[8 points]
+
+Using the `forest_fires` dataset in the **ucidata** package, analyze the burned area of the forest by month.  Use whatever graphical forms you deem most appropriate. Describe important trends.
+
+```{R}
+#lineup of histogram by month
+library(ucidata)
+library(ggplot2)
+library(plyr)
+library(ggridges)
+par(mfrow=c(4,3))
+df <- data.frame(forest_fires$area, forest_fires$month)
+ggplot(df, aes(x = forest_fires.area,y = ..density..)) +
+  geom_histogram(fill="blue",color="black") +
+  facet_grid(cols = vars(df[,"forest_fires.month"])) +
+  ggtitle("Density Histogram of Burned Area by Month")
+
+#ridge of the burned areas in each month
+ggplot(forest_fires, aes(x = forest_fires$area, y = forest_fires$month)) +
+  geom_density_ridges()+
+  ggtitle("Density Ridges of Burned Area by Month")
+
+#calculating monthly avgerage burned area
+monthSum = data.frame(rowsum(forest_fires$area, forest_fires$month))
+
+freq = count(forest_fires$month)
+freq = freq[,2:2]
+
+monthSum["freq"] = freq
+monthSum["avg"] = monthSum$rowsum.forest_fires.area..forest_fires.month./monthSum$freq
+names(monthSum) <- c("totalBurnedArea", "total#Days", "AverageBurnedArea")
+monthSum
+monthSum["month"] = c("apr", "aug", "dec", "feb", "jan", "jul","jun","mar","may","nov","oct","sep")
+ggplot(data=monthSum, aes(x=month, y=totalBurnedArea, group=1)) +
+  geom_line()+
+  geom_point()+
+  ggtitle("Total Burned Area by Month")
+ggplot(data=monthSum, aes(x=month, y=AverageBurnedArea, group=1)) +
+  geom_line()+
+  geom_point()+
+  ggtitle("Average Burned Area by Month")
+```
+
+**From histograms and ridges,**
+
+The most obvious pattern is that for all the months, most days are with 0 burned area. 
+
+According to the lineup of density histograms grouped by month and the ridges, Jan and Nov had 0 burned area. The main reason could be during winter, the temperature is too low for forest fire to burn.
+
+Also, the histograms and ridges shows that Apr, Dec, Feb, Jul, Jun, Mar and Oct had small-scaled forest fire for a small amount of days, which may be the common situation for most of the forest fire. 
+
+In May, the number of days with 0 burned area is the same as the number of days with a small amount of burned area, which indicates that there might be a long-lasting small-scaled forest fire or there might be many small-scaled forest fire occurred in May. 
+
+In Aug and Sep, there were a couple of days with large amount of burned area, which indicates that there might be a large-scaled forest fire occurred during these two months. The main reason might be the temperature were at the peak of the year and it was dry during these two months. 
+
+
+
+**From linecharts,**
+
+The line of Average Burned Area is significantly different from the line of Total Burned Area.  The one for average burned area shows random pattern while the one for total burned area shows that Aug and Sep have significantly larger amount of burned area. We believe that the difference  is mainly because the total number of observations in each month are not close to each others. Some months, like Aug and Sep, have over 100 observations while some months like May and Nov only have a couple of observations. This make the comparison of amount of burned area between months less meaningful. 
